@@ -1,10 +1,6 @@
-import { useState, useRef, Suspense, useEffect } from 'react';
-import { Canvas, useLoader, useThree } from '@react-three/fiber';
-import { OrbitControls, Stage, Center } from '@react-three/drei';
-import { STLLoader } from 'three/examples/jsm/loaders/STLLoader';
-import * as THREE from 'three';
+import { useState, useRef, Suspense, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Upload, Box, Ruler, DollarSign, RefreshCw } from 'lucide-react';
+import { Upload, Box, Ruler, DollarSign, RefreshCw, RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
 import { useI18n } from '../lib/i18n';
 import { Button } from './ui/button';
 import { 
@@ -23,63 +19,109 @@ const MATERIAL_PRICES = {
     carbonFiber: { price: 0.35, name: 'Fibra di Carbonio', color: '#1f2937' },
 };
 
-// STL Model Component
-const STLModel = ({ geometry, material }) => {
-    const meshRef = useRef();
-    const materialColor = MATERIAL_PRICES[material]?.color || '#f97316';
-
-    return (
-        <mesh ref={meshRef} geometry={geometry} castShadow receiveShadow>
-            <meshStandardMaterial 
-                color={materialColor}
-                metalness={0.3}
-                roughness={0.5}
-            />
-        </mesh>
-    );
-};
-
-// Loading fallback
-const LoadingFallback = () => {
-    const { t } = useI18n();
-    return (
-        <mesh>
-            <boxGeometry args={[1, 1, 1]} />
-            <meshBasicMaterial color="#f97316" wireframe />
-        </mesh>
-    );
-};
-
-// Calculate volume and dimensions from geometry
-const calculateGeometryStats = (geometry) => {
-    if (!geometry) return { volume: 0, dimensions: { x: 0, y: 0, z: 0 } };
-
-    geometry.computeBoundingBox();
-    const boundingBox = geometry.boundingBox;
+// Parse STL file and extract basic info
+const parseSTLFile = (arrayBuffer) => {
+    const dataView = new DataView(arrayBuffer);
+    
+    // Check if ASCII or binary STL
+    const header = new TextDecoder().decode(new Uint8Array(arrayBuffer, 0, 80));
+    const isBinary = !header.startsWith('solid') || arrayBuffer.byteLength > header.indexOf('\n') + 1;
+    
+    let triangleCount = 0;
+    let minX = Infinity, minY = Infinity, minZ = Infinity;
+    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+    
+    if (isBinary) {
+        // Binary STL format
+        triangleCount = dataView.getUint32(80, true);
+        
+        for (let i = 0; i < triangleCount; i++) {
+            const offset = 84 + i * 50;
+            
+            // Skip normal (12 bytes), read 3 vertices (36 bytes)
+            for (let v = 0; v < 3; v++) {
+                const vOffset = offset + 12 + v * 12;
+                const x = dataView.getFloat32(vOffset, true);
+                const y = dataView.getFloat32(vOffset + 4, true);
+                const z = dataView.getFloat32(vOffset + 8, true);
+                
+                minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+                minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+                minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z);
+            }
+        }
+    } else {
+        // ASCII STL - rough estimation
+        const text = new TextDecoder().decode(arrayBuffer);
+        const vertexMatches = text.match(/vertex\s+([^\s]+)\s+([^\s]+)\s+([^\s]+)/g);
+        
+        if (vertexMatches) {
+            triangleCount = Math.floor(vertexMatches.length / 3);
+            
+            vertexMatches.forEach(match => {
+                const parts = match.split(/\s+/);
+                const x = parseFloat(parts[1]);
+                const y = parseFloat(parts[2]);
+                const z = parseFloat(parts[3]);
+                
+                if (!isNaN(x) && !isNaN(y) && !isNaN(z)) {
+                    minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+                    minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+                    minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z);
+                }
+            });
+        }
+    }
     
     const dimensions = {
-        x: Math.abs(boundingBox.max.x - boundingBox.min.x),
-        y: Math.abs(boundingBox.max.y - boundingBox.min.y),
-        z: Math.abs(boundingBox.max.z - boundingBox.min.z),
+        x: Math.abs(maxX - minX),
+        y: Math.abs(maxY - minY),
+        z: Math.abs(maxZ - minZ),
     };
-
-    // Approximate volume calculation (bounding box volume * fill factor)
-    // For more accurate volume, you'd need to calculate the actual mesh volume
+    
+    // Approximate volume calculation (bounding box * fill factor)
     const boundingVolume = dimensions.x * dimensions.y * dimensions.z;
-    const estimatedVolume = boundingVolume * 0.3; // Approximate fill factor
-
-    return { volume: estimatedVolume, dimensions };
+    const estimatedVolume = boundingVolume * 0.3; // Approximate 30% fill
+    
+    return {
+        triangleCount,
+        dimensions,
+        volume: estimatedVolume,
+        boundingVolume
+    };
 };
 
-// STL Viewer Component
+// STL Viewer Component with CSS 3D Preview
 export const STLViewer = () => {
     const { t } = useI18n();
     const [file, setFile] = useState(null);
-    const [geometry, setGeometry] = useState(null);
+    const [stlData, setStlData] = useState(null);
     const [material, setMaterial] = useState('pla');
-    const [stats, setStats] = useState({ volume: 0, dimensions: { x: 0, y: 0, z: 0 } });
     const [isDragging, setIsDragging] = useState(false);
+    const [rotation, setRotation] = useState({ x: 0, y: 0 });
+    const [isRotating, setIsRotating] = useState(true);
     const fileInputRef = useRef(null);
+    const animationRef = useRef(null);
+
+    // Auto rotation animation
+    useEffect(() => {
+        if (isRotating && stlData) {
+            const animate = () => {
+                setRotation(prev => ({
+                    x: prev.x,
+                    y: prev.y + 0.5
+                }));
+                animationRef.current = requestAnimationFrame(animate);
+            };
+            animationRef.current = requestAnimationFrame(animate);
+        }
+        
+        return () => {
+            if (animationRef.current) {
+                cancelAnimationFrame(animationRef.current);
+            }
+        };
+    }, [isRotating, stlData]);
 
     // Handle file upload
     const handleFileChange = (event) => {
@@ -90,19 +132,17 @@ export const STLViewer = () => {
     };
 
     // Load STL file
-    const loadSTLFile = (file) => {
+    const loadSTLFile = async (file) => {
         const reader = new FileReader();
         reader.onload = (e) => {
-            const loader = new STLLoader();
-            const geometry = loader.parse(e.target.result);
-            geometry.center();
-            geometry.computeVertexNormals();
-            
-            setGeometry(geometry);
-            setFile(file);
-            
-            const calculatedStats = calculateGeometryStats(geometry);
-            setStats(calculatedStats);
+            try {
+                const data = parseSTLFile(e.target.result);
+                setStlData(data);
+                setFile(file);
+                setRotation({ x: -20, y: 0 });
+            } catch (error) {
+                console.error('Error parsing STL:', error);
+            }
         };
         reader.readAsArrayBuffer(file);
     };
@@ -128,7 +168,7 @@ export const STLViewer = () => {
     };
 
     // Calculate estimated cost
-    const estimatedCost = stats.volume * MATERIAL_PRICES[material].price;
+    const estimatedCost = stlData ? stlData.volume * MATERIAL_PRICES[material].price : 0;
     const setupFee = 5; // Base setup fee
     const totalCost = estimatedCost + setupFee;
 
@@ -165,32 +205,120 @@ export const STLViewer = () => {
                 )}
             </div>
 
-            {/* 3D Viewer */}
+            {/* 3D Preview */}
             <div className="relative h-[400px] bg-slate-900/80 border border-slate-800 rounded-sm overflow-hidden">
-                {geometry ? (
-                    <Canvas
-                        camera={{ position: [0, 0, 100], fov: 45 }}
-                        gl={{ antialias: true }}
-                        data-testid="stl-canvas"
-                    >
-                        <Suspense fallback={<LoadingFallback />}>
-                            <Stage
-                                intensity={0.5}
-                                environment="city"
-                                adjustCamera={1.5}
+                {stlData ? (
+                    <div className="absolute inset-0 flex items-center justify-center" style={{ perspective: '800px' }}>
+                        {/* Grid floor */}
+                        <div className="absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-slate-800/50 to-transparent" />
+                        
+                        {/* CSS 3D Box representation */}
+                        <div
+                            className="relative"
+                            style={{
+                                transformStyle: 'preserve-3d',
+                                transform: `rotateX(${rotation.x}deg) rotateY(${rotation.y}deg)`
+                            }}
+                        >
+                            {/* Normalize dimensions for display */}
+                            {(() => {
+                                const maxDim = Math.max(stlData.dimensions.x, stlData.dimensions.y, stlData.dimensions.z);
+                                const scale = maxDim > 0 ? 100 / maxDim : 1;
+                                const w = stlData.dimensions.x * scale;
+                                const h = stlData.dimensions.y * scale;
+                                const d = stlData.dimensions.z * scale;
+                                
+                                return (
+                                    <>
+                                        {/* Front face */}
+                                        <div
+                                            className="absolute bg-orange-500/20 border-2 border-orange-500/60"
+                                            style={{
+                                                width: w,
+                                                height: h,
+                                                transform: `translateZ(${d/2}px)`,
+                                                left: -w/2,
+                                                top: -h/2
+                                            }}
+                                        />
+                                        {/* Back face */}
+                                        <div
+                                            className="absolute bg-orange-500/10 border-2 border-orange-500/40"
+                                            style={{
+                                                width: w,
+                                                height: h,
+                                                transform: `translateZ(${-d/2}px) rotateY(180deg)`,
+                                                left: -w/2,
+                                                top: -h/2
+                                            }}
+                                        />
+                                        {/* Left face */}
+                                        <div
+                                            className="absolute bg-orange-500/15 border-2 border-orange-500/50"
+                                            style={{
+                                                width: d,
+                                                height: h,
+                                                transform: `rotateY(-90deg) translateZ(${w/2}px)`,
+                                                left: -d/2,
+                                                top: -h/2
+                                            }}
+                                        />
+                                        {/* Right face */}
+                                        <div
+                                            className="absolute bg-orange-500/15 border-2 border-orange-500/50"
+                                            style={{
+                                                width: d,
+                                                height: h,
+                                                transform: `rotateY(90deg) translateZ(${w/2}px)`,
+                                                left: -d/2,
+                                                top: -h/2
+                                            }}
+                                        />
+                                        {/* Top face */}
+                                        <div
+                                            className="absolute bg-orange-500/25 border-2 border-orange-500/60"
+                                            style={{
+                                                width: w,
+                                                height: d,
+                                                transform: `rotateX(90deg) translateZ(${h/2}px)`,
+                                                left: -w/2,
+                                                top: -d/2
+                                            }}
+                                        />
+                                        {/* Bottom face */}
+                                        <div
+                                            className="absolute bg-orange-500/10 border-2 border-orange-500/30"
+                                            style={{
+                                                width: w,
+                                                height: d,
+                                                transform: `rotateX(-90deg) translateZ(${h/2}px)`,
+                                                left: -w/2,
+                                                top: -d/2
+                                            }}
+                                        />
+                                    </>
+                                );
+                            })()}
+                        </div>
+
+                        {/* Controls */}
+                        <div className="absolute bottom-4 right-4 flex gap-2">
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                className="bg-slate-900/80 border-slate-700"
+                                onClick={() => setIsRotating(!isRotating)}
+                                data-testid="toggle-rotation"
                             >
-                                <Center>
-                                    <STLModel geometry={geometry} material={material} />
-                                </Center>
-                            </Stage>
-                            <OrbitControls 
-                                autoRotate 
-                                autoRotateSpeed={1}
-                                enableZoom={true}
-                                enablePan={true}
-                            />
-                        </Suspense>
-                    </Canvas>
+                                <RotateCcw className={`w-4 h-4 ${isRotating ? 'text-orange-500' : 'text-slate-400'}`} />
+                            </Button>
+                        </div>
+                        
+                        {/* File info overlay */}
+                        <div className="absolute top-4 left-4 text-xs font-mono text-slate-400">
+                            <p>Triangoli: {stlData.triangleCount.toLocaleString()}</p>
+                        </div>
+                    </div>
                 ) : (
                     <div className="absolute inset-0 flex items-center justify-center">
                         <div className="text-center">
@@ -202,7 +330,7 @@ export const STLViewer = () => {
             </div>
 
             {/* Stats and Quote */}
-            {geometry && (
+            {stlData && (
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -215,7 +343,7 @@ export const STLViewer = () => {
                             {t('modeling3dPage.stlViewer.volume')}
                         </div>
                         <p className="font-mono text-xl text-white">
-                            {stats.volume.toFixed(2)} <span className="text-sm text-slate-400">cm³</span>
+                            {stlData.volume.toFixed(2)} <span className="text-sm text-slate-400">cm³</span>
                         </p>
                     </div>
 
@@ -226,11 +354,11 @@ export const STLViewer = () => {
                             {t('modeling3dPage.stlViewer.dimensions')}
                         </div>
                         <p className="font-mono text-white">
-                            <span className="text-orange-400">{stats.dimensions.x.toFixed(1)}</span>
+                            <span className="text-orange-400">{stlData.dimensions.x.toFixed(1)}</span>
                             <span className="text-slate-500"> × </span>
-                            <span className="text-orange-400">{stats.dimensions.y.toFixed(1)}</span>
+                            <span className="text-orange-400">{stlData.dimensions.y.toFixed(1)}</span>
                             <span className="text-slate-500"> × </span>
-                            <span className="text-orange-400">{stats.dimensions.z.toFixed(1)}</span>
+                            <span className="text-orange-400">{stlData.dimensions.z.toFixed(1)}</span>
                             <span className="text-sm text-slate-400 ml-1">mm</span>
                         </p>
                     </div>
@@ -282,7 +410,7 @@ export const STLViewer = () => {
             )}
 
             {/* Request Quote Button */}
-            {geometry && (
+            {stlData && (
                 <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
