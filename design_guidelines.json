@@ -1,0 +1,121 @@
+{
+  "brand_identity": {
+    "name": "MecaLab - L'Officina Digitale",
+    "owner": "Amir El Mekauy",
+    "tagline": "Artigiano Tecnologico & Problem Solver",
+    "tone": "Technical, Practical, Innovative, Hands-on, Engineering-focused",
+    "aesthetic": "Dark Mode Engineering, Mechanical Dashboard, Blueprint, Industrial"
+  },
+  "typography": {
+    "primary_font": "Manrope",
+    "secondary_font": "JetBrains Mono",
+    "usage": {
+      "headings": "JetBrains Mono, font-bold, tracking-tight, uppercase for section titles",
+      "body": "Manrope, font-normal, leading-relaxed, high legibility",
+      "code": "JetBrains Mono, for technical specs, pricing, and data displays"
+    },
+    "scale": {
+      "h1": "text-5xl md:text-7xl font-bold tracking-tighter",
+      "h2": "text-3xl md:text-5xl font-bold tracking-tight",
+      "h3": "text-xl md:text-2xl font-semibold tracking-wide uppercase",
+      "body": "text-base md:text-lg text-slate-400"
+    }
+  },
+  "colors": {
+    "theme": "dark",
+    "palette": {
+      "background": "#020617",
+      "foreground": "#f8fafc",
+      "primary": "#f97316",
+      "primary_foreground": "#020617",
+      "secondary": "#1e293b",
+      "secondary_foreground": "#f8fafc",
+      "accent": "#f97316",
+      "accent_foreground": "#020617",
+      "muted": "#0f172a",
+      "muted_foreground": "#94a3b8",
+      "border": "#1e293b",
+      "input": "#1e293b",
+      "ring": "#f97316"
+    },
+    "gradients": {
+      "hero_glow": "radial-gradient(circle at center, rgba(249, 115, 22, 0.15) 0%, rgba(2, 6, 23, 0) 70%)",
+      "grid_fade": "linear-gradient(to bottom, transparent, #020617 90%)"
+    }
+  },
+  "visual_enhancers": {
+    "grid_background": "bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]",
+    "borders": "1px solid #1e293b (slate-800)",
+    "shadows": "0 0 20px -5px rgba(249, 115, 22, 0.1)",
+    "glassmorphism": "bg-slate-950/80 backdrop-blur-md border border-slate-800/50",
+    "radius": "rounded-none (Sharp/Industrial) or rounded-sm (Minimal)"
+  },
+  "layout_strategies": {
+    "container": "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8",
+    "section_spacing": "py-24 md:py-32",
+    "bento_grid": "grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-[minmax(200px,auto)]",
+    "dashboard_layout": "Sidebar (collapsible on mobile) + Main Content Area with Breadcrumbs"
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-orange-500 hover:bg-orange-600 text-slate-950 font-bold rounded-sm uppercase tracking-wider transition-all hover:shadow-[0_0_15px_rgba(249,115,22,0.4)]",
+      "secondary": "bg-transparent border border-slate-700 hover:border-orange-500/50 hover:text-orange-500 text-slate-300 rounded-sm uppercase tracking-wider transition-all"
+    },
+    "cards": {
+      "style": "bg-slate-900/50 border border-slate-800 hover:border-orange-500/30 transition-colors group relative overflow-hidden",
+      "content": "p-6 flex flex-col h-full"
+    },
+    "inputs": {
+      "style": "bg-slate-950 border-slate-800 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 rounded-sm font-mono text-sm"
+    },
+    "navbar": {
+      "style": "fixed top-0 w-full z-50 bg-slate-950/80 backdrop-blur-md border-b border-slate-800",
+      "elements": "Logo (Left), Links (Center/Right), Language Switcher (Right), Mobile Menu (Right)"
+    }
+  },
+  "motion": {
+    "library": "framer-motion",
+    "settings": {
+      "initial": { "opacity": 0, "y": 20 },
+      "animate": { "opacity": 1, "y": 0 },
+      "transition": { "duration": 0.5, "ease": "easeOut" }
+    },
+    "hover_effects": "scale-105, border-color-change, glow-effect"
+  },
+  "three_js": {
+    "hero_model": "Geometric shape (Icosahedron or Cube) with wireframe material, rotating slowly. Orange wireframe, dark fill.",
+    "stl_viewer": "Canvas with OrbitControls, Stage, and GridHelper. Support for .stl file loading. Auto-rotate on idle."
+  },
+  "image_urls": {
+    "hero_bg": "https://images.unsplash.com/photo-1713557112617-e12d67bddc3a",
+    "services": {
+      "3d_printing": "https://images.unsplash.com/photo-1642969164999-979483e21601",
+      "tech_support": "https://images.unsplash.com/photo-1579803270143-4742a2897a1d",
+      "smart_home": "https://images.unsplash.com/photo-1655298801080-0bfffe5d8db3",
+      "excel_automation": "https://images.unsplash.com/photo-1770734360042-676ef707d022"
+    },
+    "about": {
+      "amir_portrait": "https://images.unsplash.com/photo-1627890458144-4c0c481bf4b8"
+    }
+  },
+  "instructions_to_main_agent": [
+    "1. SETUP: Install 'lucide-react', 'framer-motion', 'three', '@react-three/fiber', '@react-three/drei', 'clsx', 'tailwind-merge'.",
+    "2. THEME: Update 'tailwind.config.js' with the colors provided in this JSON. Ensure 'darkMode' is set to 'class'.",
+    "3. FONTS: Import 'Manrope' and 'JetBrains Mono' from Google Fonts in 'index.css'.",
+    "4. LAYOUT: Create a 'Layout' component that includes the Navbar, Footer, and a 'main' wrapper with the grid background.",
+    "5. PAGES: Implement the 6 required pages: Home, 3D Modeling, Excel Automation, Smart Home, Tech Support, Contacts.",
+    "6. 3D HERO: Create a 'Hero3D' component using R3F. It should be lightweight and look like a technical schematic.",
+    "7. STL VIEWER: Create an 'STLViewer' component. It needs to accept a file upload and display it. Mock the volume calculation if actual parsing is too complex for MVP.",
+    "8. FORMS: Use the provided Formspree URL for the contact form.",
+    "9. I18N: Create a simple context or hook for language switching (IT/EN). Store translations in a separate file.",
+    "10. TESTING: Add 'data-testid' to all interactive elements (buttons, inputs, links)."
+  ],
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "Do not use generic centered layouts. Use the 'Bento' grid strategy.",
+    "Use 2-3x more spacing than typical designs.",
+    "Every interaction needs micro-animations.",
+    "Use 'sonner' for toasts.",
+    "Components MUST use named exports.",
+    "Pages MUST use default exports."
+  ]
+}
