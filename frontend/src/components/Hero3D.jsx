@@ -1,10 +1,10 @@
-import { useRef, useMemo, useState, useEffect } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
-import { Float, OrbitControls } from '@react-three/drei';
+import { useRef, useState, useEffect, Suspense } from 'react';
+import { Canvas, useFrame, extend } from '@react-three/fiber';
+import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 
-// Geometric wireframe cube
-const WireframeCube = ({ position = [0, 0, 0], scale = 1 }) => {
+// Simple wireframe cube
+const WireframeCube = () => {
     const meshRef = useRef();
 
     useFrame(() => {
@@ -15,82 +15,74 @@ const WireframeCube = ({ position = [0, 0, 0], scale = 1 }) => {
     });
 
     return (
-        <mesh ref={meshRef} position={position} scale={scale}>
+        <mesh ref={meshRef} scale={1.5}>
             <boxGeometry args={[2, 2, 2]} />
             <meshBasicMaterial color="#f97316" wireframe />
         </mesh>
     );
 };
 
-// Floating geometric shape
-const FloatingShape = ({ position, rotation, scale, color }) => {
+// Small floating shapes
+const FloatingIcosahedron = ({ position, scale, color, speed = 1 }) => {
     const meshRef = useRef();
 
     useFrame((state) => {
         if (meshRef.current) {
-            meshRef.current.rotation.x = Math.sin(state.clock.elapsedTime * 0.5) * 0.2;
-            meshRef.current.rotation.z = Math.cos(state.clock.elapsedTime * 0.3) * 0.1;
-            meshRef.current.position.y = position[1] + Math.sin(state.clock.elapsedTime * 0.8) * 0.3;
+            meshRef.current.rotation.x = Math.sin(state.clock.elapsedTime * 0.5 * speed) * 0.3;
+            meshRef.current.rotation.z = Math.cos(state.clock.elapsedTime * 0.3 * speed) * 0.2;
+            meshRef.current.position.y = position[1] + Math.sin(state.clock.elapsedTime * 0.8 * speed) * 0.3;
         }
     });
 
     return (
-        <mesh ref={meshRef} position={position} rotation={rotation} scale={scale}>
+        <mesh ref={meshRef} position={position} scale={scale}>
             <icosahedronGeometry args={[1, 0]} />
             <meshBasicMaterial color={color} wireframe transparent opacity={0.6} />
         </mesh>
     );
 };
 
-// Grid plane component
-const Grid = () => {
-    const gridRef = useRef();
-    
+// Grid plane
+const GridPlane = () => {
     return (
-        <group ref={gridRef} position={[0, -2.5, 0]}>
-            <gridHelper args={[20, 20, '#1e293b', '#1e293b']} />
-        </group>
+        <gridHelper args={[20, 20, '#1e293b', '#1e293b']} position={[0, -2.5, 0]} />
     );
 };
 
-// Particles
-const Particles = ({ count = 100 }) => {
-    const pointsRef = useRef();
+// Simple particles using instanced mesh
+const SimpleParticles = ({ count = 80 }) => {
+    const mesh = useRef();
+    const dummy = new THREE.Object3D();
     
-    const positions = useMemo(() => {
-        const pos = new Float32Array(count * 3);
-        for (let i = 0; i < count; i++) {
-            pos[i * 3] = (Math.random() - 0.5) * 15;
-            pos[i * 3 + 1] = (Math.random() - 0.5) * 15;
-            pos[i * 3 + 2] = (Math.random() - 0.5) * 15;
-        }
-        return pos;
-    }, [count]);
+    const particles = useRef(
+        Array.from({ length: count }, () => ({
+            position: [
+                (Math.random() - 0.5) * 12,
+                (Math.random() - 0.5) * 12,
+                (Math.random() - 0.5) * 12
+            ],
+            scale: Math.random() * 0.03 + 0.01
+        }))
+    );
 
-    useFrame(() => {
-        if (pointsRef.current) {
-            pointsRef.current.rotation.y += 0.0005;
+    useFrame((state) => {
+        if (mesh.current) {
+            particles.current.forEach((particle, i) => {
+                dummy.position.set(...particle.position);
+                dummy.scale.setScalar(particle.scale);
+                dummy.updateMatrix();
+                mesh.current.setMatrixAt(i, dummy.matrix);
+            });
+            mesh.current.instanceMatrix.needsUpdate = true;
+            mesh.current.rotation.y += 0.0005;
         }
     });
 
     return (
-        <points ref={pointsRef}>
-            <bufferGeometry>
-                <bufferAttribute
-                    attach="attributes-position"
-                    count={count}
-                    array={positions}
-                    itemSize={3}
-                />
-            </bufferGeometry>
-            <pointsMaterial 
-                size={0.03} 
-                color="#f97316" 
-                transparent 
-                opacity={0.6}
-                sizeAttenuation
-            />
-        </points>
+        <instancedMesh ref={mesh} args={[null, null, count]}>
+            <sphereGeometry args={[1, 8, 8]} />
+            <meshBasicMaterial color="#f97316" transparent opacity={0.7} />
+        </instancedMesh>
     );
 };
 
@@ -102,17 +94,19 @@ const Scene = () => {
             <pointLight position={[10, 10, 10]} intensity={0.5} color="#f97316" />
             
             {/* Main Geometric Cube */}
-            <WireframeCube position={[0, 0, 0]} scale={1.5} />
+            <WireframeCube />
             
-            {/* Floating smaller shapes */}
-            <FloatingShape position={[-4, 2, -2]} rotation={[0, 0, 0]} scale={0.4} color="#f97316" />
-            <FloatingShape position={[4, -1, -3]} rotation={[0.5, 0.5, 0]} scale={0.3} color="#fb923c" />
-            <FloatingShape position={[-3, -2, 1]} rotation={[0, 0.3, 0]} scale={0.25} color="#fdba74" />
-            <FloatingShape position={[3, 2, -1]} rotation={[0.2, 0, 0.2]} scale={0.35} color="#ea580c" />
+            {/* Floating shapes */}
+            <FloatingIcosahedron position={[-4, 2, -2]} scale={0.4} color="#f97316" speed={1} />
+            <FloatingIcosahedron position={[4, -1, -3]} scale={0.3} color="#fb923c" speed={0.8} />
+            <FloatingIcosahedron position={[-3, -2, 1]} scale={0.25} color="#fdba74" speed={1.2} />
+            <FloatingIcosahedron position={[3, 2, -1]} scale={0.35} color="#ea580c" speed={0.9} />
             
-            {/* Grid and Particles */}
-            <Grid />
-            <Particles count={150} />
+            {/* Grid */}
+            <GridPlane />
+            
+            {/* Particles */}
+            <SimpleParticles count={80} />
             
             {/* Controls */}
             <OrbitControls 
@@ -129,13 +123,13 @@ const Scene = () => {
 
 // Main Hero3D Component
 export const Hero3D = () => {
-    const [mounted, setMounted] = useState(false);
+    const [isClient, setIsClient] = useState(false);
     
     useEffect(() => {
-        setMounted(true);
+        setIsClient(true);
     }, []);
     
-    if (!mounted) {
+    if (!isClient) {
         return <div className="absolute inset-0 z-0 bg-slate-950" data-testid="hero-3d-loading" />;
     }
 
@@ -145,8 +139,13 @@ export const Hero3D = () => {
                 camera={{ position: [0, 0, 8], fov: 45 }}
                 gl={{ antialias: true, alpha: true }}
                 style={{ background: 'transparent' }}
+                onCreated={({ gl }) => {
+                    gl.setClearColor(0x000000, 0);
+                }}
             >
-                <Scene />
+                <Suspense fallback={null}>
+                    <Scene />
+                </Suspense>
             </Canvas>
         </div>
     );
